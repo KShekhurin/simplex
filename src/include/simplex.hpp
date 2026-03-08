@@ -259,6 +259,17 @@ inline mat::vector<double> remove_neg_error(mat::vector<double> const& x) {
     return res;
 }
 
+inline mat::vector<double> remove_error(mat::vector<double> const& x) {
+    mat::vector<double> res(x);
+
+    for(int i = 0; i < x.get_size(); ++i) {
+        if(abs(x(i)) < EPS) {
+            res(i) = 0;
+        }
+    }
+    return res;
+}
+
 inline status simplex(mat::vector<double>& x_prev, mat::matrix<double> &A,
                                     mat::vector<double> &c) {
     const auto N = x_prev.get_size();
@@ -274,11 +285,6 @@ inline status simplex(mat::vector<double>& x_prev, mat::matrix<double> &A,
     for(int i = 0; i < x_prev.get_size(); i++) {
         if(x_prev(i) > EPS) {
             np.push_back(i);
-
-            if(rank(A.extract_cols(np)) != np.size()) {
-                nn.push_back(i);
-                np.pop_back();
-            }
         } else {
             nn.push_back(i);
         }
@@ -353,11 +359,11 @@ inline status find_vector(task& task) {
         code = status.code;
     } while(code == CONTINUE);
 
-    if(any_greater_than_zero(new_x.splice(N - 1, N + M - 1))) {
+    if(any_greater_than_zero(new_x.splice(N, N + M - 1))) {
         return {new_x, EMPTY};
     }
 
-    return {new_x.splice(0, N - 1), code};
+    return {remove_error(new_x.splice(0, N - 1)), code};
 }
 
 inline status simplex_main(task& task) {
@@ -378,7 +384,7 @@ inline status simplex_main(task& task) {
         code = status.code;
     } while(code == CONTINUE);
 
-    return {x, code};
+    return {remove_error(x), code};
 }
 
 }
