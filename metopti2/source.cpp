@@ -165,96 +165,195 @@ namespace szlab {
             }
         }
 
-        Dot findUnopt() { // Найдем первую свободную ячейку, нарушающую условие оптимальности.
-            int entering_row = -1, entering_col = -1;
-            for (int j = 0; j < n; j++) {
-                for (int i = 0; i < m; i++) {
-                    if (!table[i][j].isBase) {
-                        if (u[i] + v[j] > table[i][j].cost) {
-                            entering_row = i;
-                            entering_col = j;
-                            break;
+        Dot findUnopt() {
+                double min_delta = 0.0;  // Ищем только отрицательные значения
+                int min_i = -1, min_j = -1;
+
+                // Перебираем все свободные (небазисные) ячейки
+                for (int i = 0; i < m; ++i) {
+                    for (int j = 0; j < n; ++j) {
+                        if (!table[i][j].isBase) {
+                            // Вычисляем оценку ячейки: Δ = c_ij - u_i - v_j
+                            double delta = table[i][j].cost - u[i] - v[j];
+
+                            // Если оценка отрицательная и меньше текущей минимальной
+                            if (delta < min_delta) {
+                                min_delta = delta;
+                                min_i = i;
+                                min_j = j;
+                            }
                         }
                     }
                 }
-                if (entering_row != -1) break;
+
+                // Если отрицательных оценок нет — решение оптимально
+                if (min_i == -1 && min_j == -1) {
+                    return Dot(-1, -1);  // Специальное значение
+                }
+
+                // Возвращаем координаты ячейки с наибольшей возможностью улучшения
+                return Dot(min_i, min_j);
             }
-            if (entering_row == -1) return {-1,-1}; // решение оптимально
-            Dot value(entering_row, entering_col);
-            return value;
-        }
 
         void optiCycle(Dot matrix_pos) {
-            int i_opt = matrix_pos.x;
-            int j_opt = matrix_pos.y;
-            // счетчик для одинокости
-            int counter = 0;
-            // угловой вектор
-            vector<Dot> angleVec = {};
-            vector<vector<double>> basisplus(m, vector<double>(n, 0.0)); // вектор базисов + точки неоптимизации, хранящий cost таблицы
+            // Поиск цикла пересчёта методом DFS
+            // Цикл должен начинаться и заканчиваться в matrix_pos,
+            // чередовать горизонтальные и вертикальные ходы,
+            // проходить только через базисные ячейки (кроме стартовой)
 
-            basisplus[i_opt][j_opt] = table[i_opt][j_opt].cost; // добавили точку неоптимизации
-            for (int basis_index = 0; basis_index < (n * m - 1); basis_index++) {
-                basisplus[u_indexes[basis_index]][v_indexes[basis_index]] = table[u_indexes[basis_index]][v_indexes[basis_index]].cost;
-            }
-            // угловой называем полную ячейку участвующую в цикле пересчёта
-            // у угловых ячеек есть замечательное свойство - они являются "одинокими"
-            // это значит что кроме них нет никаких ячеек или в строке, или в столбце.
-            // найдем все одинокие базисные ячейки, включая точку не-оптимума
-            // проверяем столбцы и строки по базисным векторам
+            vector<pair<int, int>> cycle;
+            cycle.push_back({matrix_pos.x, matrix_pos.y});
 
-            // столбцы
-            for (int i = 0; i < m; i++) {
-                counter = 0;
-                Dot buffer = {-1,-1};
-                for (int j = 0; j < n; j++) {
-                    if (basisplus[i][j] != 0) {
-                        counter++;
-                        buffer.x = i;
-                        buffer.y = j;
+            // Рекурсивная функция DFS для поиска цикла
+            function<bool(int, int, bool)> dfs = [&](int i, int j, bool move_in_row) -> bool {
+                // Условие завершения: вернулись в стартовую ячейку с циклом из ≥4 ячеек
+                if (cycle.size() > 1 && i == matrix_pos.x && j == matrix_pos.y) {
+                    return true;
+                }
+
+                if (move_in_row) {
+                    // Горизонтальный ход: та же строка, другой столбец
+                    for (int nj = 0; nj < n; ++nj) {
+                        if (nj == j) continue;
+
+                        // Можно использовать только стартовую ячейку или базисные
+                        if (!((i == matrix_pos.x && nj == matrix_pos.y) || table[i][nj].isBase)) {
+                            continue;
+                        }
+
+                        // Проверка, что ячейка ещё не в цикле (кроме стартовой)
+                        bool in_cycle = false;
+                        for (size_t k = 1; k < cycle.size(); ++k) {
+                            if (cycle[k].first == i && cycle[k].second == nj) {
+                                in_cycle = true;
+                                break;
+                            }
+                        }
+                        if (in_cycle) continue;
+
+                        cycle.push_back({i, nj});
+                        if (dfs(i, nj, false)) return true;
+                        cycle.pop_back();
+                    }
+                } else {
+                    // Вертикальный ход: тот же столбец, другая строка
+                    for (int ni = 0; ni < m; ++ni) {
+                        if (ni == i) continue;
+
+                        if (!((ni == matrix_pos.x && j == matrix_pos.y) || table[ni][j].isBase)) {
+                            continue;
+                        }
+
+                        bool in_cycle = false;
+                        for (size_t k = 1; k < cycle.size(); ++k) {
+                            if (cycle[k].first == ni && cycle[k].second == j) {
+                                in_cycle = true;
+                                break;
+                            }
+                        }
+                        if (in_cycle) continue;
+
+                        cycle.push_back({ni, j});
+                        if (dfs(ni, j, true)) return true;
+                        cycle.pop_back();
                     }
                 }
-                if (counter == 1) {
-                    basisplus[buffer.x][buffer.y] = 0.0;
+                return false;
+            };
 
+            // Попытка найти цикл: сначала с горизонтального хода, потом с вертикального
+            if (!dfs(matrix_pos.x, matrix_pos.y, true)) {
+                cycle.clear();
+                cycle.push_back({matrix_pos.x, matrix_pos.y});
+                dfs(matrix_pos.x, matrix_pos.y, false);
+            }
+
+            // Если цикл не найден или неполный — выход
+            if (cycle.size() < 4 || cycle.back() != make_pair(matrix_pos.x, matrix_pos.y)) {
+                return;
+            }
+
+            // Убираем дубликат конечной ячейки
+            cycle.pop_back();
+
+            // Находим θ = min{продукции} на позициях со знаком "-" (нечётные индексы: 1, 3, 5...)
+            double theta = numeric_limits<double>::max();
+            for (size_t k = 1; k < cycle.size(); k += 2) {
+                int i = cycle[k].first;
+                int j = cycle[k].second;
+                theta = min(theta, table[i][j].product);
+            }
+
+            // Корректируем значения product вдоль цикла:
+            // чётные индексы (0,2,4...): +θ, нечётные (1,3,5...): -θ
+            for (size_t k = 0; k < cycle.size(); ++k) {
+                int i = cycle[k].first;
+                int j = cycle[k].second;
+                if (k % 2 == 0) {
+                    table[i][j].product += theta;
+                } else {
+                    table[i][j].product -= theta;
                 }
             }
-            // строки
-            for (int j = 0; j < n; j++) {
-                counter = 0;
-                Dot buffer = {-1,-1};
-                for (int i = 0; i < m; i++) {
-                    if (basisplus[i][j] != 0) {
-                        counter++;
-                        buffer.x = i;
-                        buffer.y = j;
-                    }
-                }
-                if (counter == 1) {
-                    basisplus[buffer.x][buffer.y] = 0.0;
-                }
-            }
-            // теперь работаем только с угловыми клетками в basisplus
-            // по ним можно однозначно придти к нужной точке
-            // создаем угловой вектор и вычисляем
-            for (int i = 0; i < m; i++) {
-                for (int j = 0; j < n; j++) {
-                    if(basisplus[i][j]) angleVec.push_back({i,j});
+
+            // Обновляем базис: входящая ячейка становится базисной
+            table[matrix_pos.x][matrix_pos.y].isBase = true;
+
+            // Находим и помечаем выходящую ячейку (базисная, ставшая нулевой)
+            for (size_t k = 1; k < cycle.size(); k += 2) {
+                int i = cycle[k].first;
+                int j = cycle[k].second;
+                if (table[i][j].isBase && abs(table[i][j].product) < 1e-9) {
+                    table[i][j].isBase = false;
+                    table[i][j].product = 0.0;
+                    break;
                 }
             }
+
+            // Обновляем векторы индексов для пересчёта потенциалов
+            u_indexes.push_back(matrix_pos.x);
+            v_indexes.push_back(matrix_pos.y);
         }
 
         void PotentialsMethod() {
-            for (int j = 0; j < n; j++) {
-                for (int i = 0; i < m; i++) {
-                    if (!table[i][j].isBase) {
-                        if (u[i]+v[j]>table[i][j].cost) {
-                            //RecalcCycle();
-                            return;
-                        }
-                    }
+            cout << "\n=== Запуск метода потенциалов ===" << endl;
+
+            int iteration = 0;
+            const int MAX_ITERATIONS = 100;  // Защита от зацикливания
+
+            while (iteration < MAX_ITERATIONS) {
+                cout << "\n--- Итерация " << (iteration + 1) << " ---" << endl;
+
+                // Шаг 1: Вычисляем потенциалы для текущего базиса
+                CalculatePotentials();
+
+                // Шаг 2: Ищем неоптимальную ячейку
+                Dot unopt = findUnopt();
+
+                // Проверка на оптимальность: если отрицательных оценок нет
+                if (unopt.x == -1 && unopt.y == -1) {
+                    cout << "✓ Достигнуто оптимальное решение!" << endl;
+                    break;
                 }
+
+                double delta = table[unopt.x][unopt.y].cost - u[unopt.x] - v[unopt.y];
+                cout << "→ Найдена неоптимальная ячейка: (" << unopt.x << ", " << unopt.y
+                     << "), Δ = " << delta << endl;
+
+                // Шаг 3: Выполняем пересчёт по циклу
+                optiCycle(unopt);
+
+                // Вывод текущего состояния
+                printState();
+                functionResult();
+
+                iteration++;
             }
+
+            // Финальный вывод
+            cout << "\n=== ИТОГОВЫЙ РЕЗУЛЬТАТ ===" << endl;
+            functionResult();
+            printState();
         }
 
         double functionResult() {
@@ -318,5 +417,6 @@ int main(void) {
     problem3.printState();
     problem3.NorthwestAngle();
     problem3.printState();
+    problem3.PotentialsMethod();
     return 0;
 }
