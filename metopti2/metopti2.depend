@@ -1,0 +1,10 @@
+# depslib dependency file v1.0
+1772981802 source:/home/admin/allthestudy/cproj/metopti2/source.cpp
+	<vector>
+	<iostream>
+	<iomanip>
+	<cmath>
+	<numeric>
+	<functional>
+	<climits>
+
